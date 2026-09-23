@@ -10,14 +10,17 @@ const stripBase64Prefix = (base64: string): string => {
 export const generateTryOnImage = async (
   userPhoto: UploadedImage,
   clothingPhoto: UploadedImage,
-  userPrompt: string
+  userPrompt: string,
+  apiKey?: string
 ): Promise<string> => {
-  if (!process.env.API_KEY) {
-    throw new Error("API Key is missing. Please select a key using the button provided.");
+  const activeKey = apiKey?.trim() || process.env.API_KEY || process.env.GEMINI_API_KEY;
+
+  if (!activeKey) {
+    throw new Error("Chave de API não encontrada. Por favor, insira sua chave do Gemini.");
   }
 
   // Create a new instance right before the call to ensure the latest key is used
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const ai = new GoogleGenAI({ apiKey: activeKey });
 
   // Refined prompt for high-quality virtual try-on
   const systemInstruction = `

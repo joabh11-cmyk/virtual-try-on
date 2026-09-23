@@ -1,66 +1,84 @@
-
 import React, { useState, useEffect } from 'react';
 import { ImageUploader } from './components/ImageUploader';
 import { LoadingSpinner } from './components/LoadingSpinner';
 import { generateTryOnImage } from './services/geminiService';
 import { UploadedImage, AppState } from './types';
 
-// Fix: Define AIStudio interface and augment Window global with correct modifiers and type name
-declare global {
-  interface AIStudio {
-    hasSelectedApiKey: () => Promise<boolean>;
-    openSelectKey: () => Promise<void>;
-  }
-
-  interface Window {
-    readonly aistudio: AIStudio;
-  }
-}
-
 const App: React.FC = () => {
+  const [apiKey, setApiKey] = useState<string>('');
+  const [tempKeyInput, setTempKeyInput] = useState<string>('');
+  const [showKeyModal, setShowKeyModal] = useState<boolean>(false);
+  const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [keyError, setKeyError] = useState<string | null>(null);
+
   const [userPhoto, setUserPhoto] = useState<UploadedImage | null>(null);
   const [clothingPhoto, setClothingPhoto] = useState<UploadedImage | null>(null);
   const [prompt, setPrompt] = useState<string>('');
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
   const [resultImage, setResultImage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isKeySelected, setIsKeySelected] = useState<boolean>(false);
 
   useEffect(() => {
-    checkKey();
+    // Carrega chave salva no LocalStorage ou variável de ambiente (Vite)
+    const savedKey = localStorage.getItem('gemini_api_key');
+    const envKey = (typeof process !== 'undefined' && process.env?.API_KEY) ? process.env.API_KEY : '';
+
+    if (savedKey) {
+      setApiKey(savedKey);
+      setTempKeyInput(savedKey);
+    } else if (envKey) {
+      setApiKey(envKey);
+      setTempKeyInput(envKey);
+    }
   }, []);
 
-  const checkKey = async () => {
-    try {
-      const hasKey = await window.aistudio.hasSelectedApiKey();
-      setIsKeySelected(hasKey);
-    } catch (e) {
-      console.error("Error checking API key", e);
+  const handleSaveKey = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const cleanKey = tempKeyInput.trim();
+    if (!cleanKey) {
+      setKeyError('Por favor, informe uma chave de API válida.');
+      return;
     }
+    localStorage.setItem('gemini_api_key', cleanKey);
+    setApiKey(cleanKey);
+    setKeyError(null);
+    setShowKeyModal(false);
   };
 
-  const handleSelectKey = async () => {
-    await window.aistudio.openSelectKey();
-    setIsKeySelected(true); // Assume success per instructions
+  const handleRemoveKey = () => {
+    localStorage.removeItem('gemini_api_key');
+    setApiKey('');
+    setTempKeyInput('');
+    setShowKeyModal(false);
+  };
+
+  const handleOpenKeyModal = () => {
+    setTempKeyInput(apiKey);
+    setKeyError(null);
+    setShowKeyModal(true);
   };
 
   const handleGenerate = async () => {
     if (!userPhoto || !clothingPhoto) return;
+
+    if (!apiKey) {
+      handleOpenKeyModal();
+      return;
+    }
 
     setAppState(AppState.GENERATING);
     setErrorMessage(null);
     setResultImage(null);
 
     try {
-      const generatedImage = await generateTryOnImage(userPhoto, clothingPhoto, prompt);
+      const generatedImage = await generateTryOnImage(userPhoto, clothingPhoto, prompt, apiKey);
       setResultImage(generatedImage);
       setAppState(AppState.SUCCESS);
     } catch (error: any) {
-      if (error.message === "AUTH_REQUIRED") {
-        setErrorMessage("Sua sessão de chave de API expirou ou é inválida. Por favor, reconecte.");
-        setIsKeySelected(false);
+      if (error.message === 'AUTH_REQUIRED' || error.message?.includes('API_KEY')) {
+        setErrorMessage('Sua chave de API do Gemini parece ser inválida ou expirou. Por favor, atualize sua chave.');
       } else {
-        setErrorMessage(error.message || "Algo deu errado. Tente fotos com fundo mais simples.");
+        setErrorMessage(error.message || 'Algo deu errado. Tente fotos com fundo mais simples.');
       }
       setAppState(AppState.ERROR);
     }
@@ -75,66 +93,50 @@ const App: React.FC = () => {
     setErrorMessage(null);
   };
 
-  if (!isKeySelected) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-900 px-4">
-        <div className="max-w-md w-full bg-white rounded-3xl p-8 shadow-2xl text-center">
-          <div className="w-20 h-20 bg-indigo-100 rounded-2xl flex items-center justify-center mx-auto mb-6 text-indigo-600">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-10 h-10">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 0 1 3 3m3 0a6 6 0 1 1-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1 1 21.75 8.25Z" />
-            </svg>
-          </div>
-          <h1 className="text-2xl font-bold text-slate-900 mb-2">Bem-vindo ao Provador AI</h1>
-          <p className="text-slate-600 mb-8">
-            Para usar o modelo de alta qualidade <strong>Gemini 3 Pro</strong>, você precisa conectar sua própria chave de API.
-          </p>
-          <button 
-            onClick={handleSelectKey}
-            className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-all shadow-lg hover:shadow-indigo-500/30"
-          >
-            Conectar Chave de API
-          </button>
-          <p className="mt-4 text-xs text-slate-400">
-            Certifique-se de usar um projeto com <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" className="underline hover:text-indigo-500">faturamento ativado</a>.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
   const isReady = userPhoto && clothingPhoto;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50/50">
-      <header className="bg-white/80 backdrop-blur-md sticky top-0 z-50 border-b border-slate-200 shadow-sm">
+      {/* Header */}
+      <header className="bg-white/80 backdrop-blur-md sticky top-0 z-40 border-b border-slate-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="bg-indigo-600 p-2 rounded-lg">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5 text-white">
+            <div className="bg-indigo-600 p-2 rounded-lg text-white">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" />
               </svg>
             </div>
-            <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-violet-600">
-              Virtual Try-On Pro
-            </h1>
+            <div>
+              <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-violet-600">
+                Virtual Try-On Pro
+              </h1>
+            </div>
           </div>
-          <div className="flex items-center gap-4">
-            <button 
-              onClick={handleSelectKey}
-              className="text-xs font-medium px-3 py-1.5 bg-slate-100 text-slate-600 hover:bg-indigo-100 hover:text-indigo-600 rounded-full transition-colors"
+
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleOpenKeyModal}
+              className={`text-xs font-medium px-3 py-1.5 rounded-full transition-all flex items-center gap-1.5 ${
+                apiKey
+                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
+                  : 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100'
+              }`}
             >
-              Alterar Chave
+              <span className={`w-2 h-2 rounded-full ${apiKey ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+              {apiKey ? 'Chave Conectada' : 'Inserir Chave Gemini'}
             </button>
-            <span className="text-xs font-medium px-2.5 py-1 bg-indigo-100 text-indigo-700 rounded-full">
+            <span className="hidden sm:inline-block text-xs font-medium px-2.5 py-1 bg-indigo-100 text-indigo-700 rounded-full">
               Gemini 3 Pro
             </span>
           </div>
         </div>
       </header>
 
+      {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
           
+          {/* Controls Column */}
           <div className="lg:col-span-5 space-y-8">
             <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
               <h2 className="text-lg font-semibold text-slate-900 mb-1">Passo 1: Upload</h2>
@@ -149,11 +151,11 @@ const App: React.FC = () => {
                 />
                 
                 <div className="flex items-center justify-center -my-3 z-10 relative">
-                   <div className="bg-slate-100 p-1.5 rounded-full border border-slate-200 text-slate-400">
+                  <div className="bg-slate-100 p-1.5 rounded-full border border-slate-200 text-slate-400">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                     </svg>
-                   </div>
+                  </div>
                 </div>
 
                 <ImageUploader 
@@ -172,7 +174,7 @@ const App: React.FC = () => {
               <textarea
                 id="prompt"
                 rows={3}
-                className="w-full rounded-xl border-slate-200 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 resize-none text-sm"
+                className="w-full rounded-xl border-slate-200 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 resize-none text-sm p-3 border"
                 placeholder="Ex: Deixe a camiseta por dentro da calça, mude o fundo para um escritório..."
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
@@ -201,6 +203,7 @@ const App: React.FC = () => {
             </button>
           </div>
 
+          {/* Results Column */}
           <div className="lg:col-span-7">
             <div className="h-full min-h-[500px] bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden flex flex-col relative">
               <div className="border-b border-slate-100 p-4 bg-slate-50/50 flex justify-between items-center">
@@ -234,19 +237,27 @@ const App: React.FC = () => {
 
                 {appState === AppState.ERROR && (
                   <div className="text-center p-8 max-w-md">
-                     <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4 text-red-500">
+                    <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4 text-red-500">
                       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
                       </svg>
                     </div>
                     <h4 className="text-red-700 font-medium mb-2">Erro na Geração</h4>
                     <p className="text-red-600/80 text-sm mb-6">{errorMessage}</p>
-                    <button 
-                      onClick={handleGenerate}
-                      className="px-4 py-2 bg-white border border-red-200 text-red-700 rounded-lg text-sm font-medium hover:bg-red-50 transition-colors"
-                    >
-                      Tentar Novamente
-                    </button>
+                    <div className="flex justify-center gap-3">
+                      <button 
+                        onClick={handleOpenKeyModal}
+                        className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors shadow"
+                      >
+                        Verificar Chave
+                      </button>
+                      <button 
+                        onClick={handleGenerate}
+                        className="px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors"
+                      >
+                        Tentar Novamente
+                      </button>
+                    </div>
                   </div>
                 )}
 
@@ -276,6 +287,107 @@ const App: React.FC = () => {
           </div>
         </div>
       </main>
+
+      {/* Modal / Overlay para Configuração de Chave de API */}
+      {(!apiKey || showKeyModal) && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4">
+          <div className="max-w-md w-full bg-white rounded-3xl p-6 sm:p-8 shadow-2xl relative border border-slate-100">
+            {apiKey && (
+              <button 
+                onClick={() => setShowKeyModal(false)}
+                className="absolute top-5 right-5 text-slate-400 hover:text-slate-600 transition-colors p-1"
+                aria-label="Fechar"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+
+            <div className="w-14 h-14 bg-indigo-100 rounded-2xl flex items-center justify-center mx-auto mb-4 text-indigo-600">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-7 h-7">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 0 1 3 3m3 0a6 6 0 1 1-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1 1 21.75 8.25Z" />
+              </svg>
+            </div>
+
+            <h2 className="text-xl font-bold text-slate-900 text-center mb-1">
+              {apiKey ? 'Configurar Chave Gemini' : 'Bem-vindo ao Provador AI'}
+            </h2>
+            <p className="text-slate-600 text-xs sm:text-sm text-center mb-6">
+              Para processar as imagens com o modelo de alta precisão do Google Gemini, você precisa informar sua chave de API gratuita.
+            </p>
+
+            <form onSubmit={handleSaveKey} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
+                  Sua Chave de API (Gemini)
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={tempKeyInput}
+                    onChange={(e) => setTempKeyInput(e.target.value)}
+                    placeholder="AIzaSy..."
+                    className="w-full px-4 py-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all pr-10"
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                    title={showPassword ? 'Ocultar' : 'Exibir'}
+                  >
+                    {showPassword ? (
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 0 0 1.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88" />
+                      </svg>
+                    ) : (
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 0 1 0-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178Z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+                      </svg>
+                    )}
+                  </button>
+                </div>
+                {keyError && (
+                  <p className="mt-1.5 text-xs text-red-600 font-medium">{keyError}</p>
+                )}
+              </div>
+
+              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200/80 text-xs text-slate-600 space-y-1">
+                <p className="font-semibold text-slate-700">Como obter sua chave gratuita:</p>
+                <ol className="list-decimal pl-4 space-y-0.5 text-slate-500">
+                  <li>Acesse o <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-indigo-600 underline font-medium hover:text-indigo-700">Google AI Studio</a></li>
+                  <li>Faça login com sua conta Google</li>
+                  <li>Clique em <strong>"Create API key"</strong> e copie a chave gerada</li>
+                </ol>
+                <p className="text-[11px] text-slate-400 pt-1">
+                  🔒 Sua chave é salva exclusivamente no seu próprio navegador e nunca é armazenada em servidores externos.
+                </p>
+              </div>
+
+              <div className="pt-2 space-y-2">
+                <button
+                  type="submit"
+                  className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-all shadow-md hover:shadow-indigo-500/25 text-sm"
+                >
+                  {apiKey ? 'Salvar e Atualizar' : 'Salvar e Começar'}
+                </button>
+
+                {apiKey && (
+                  <button
+                    type="button"
+                    onClick={handleRemoveKey}
+                    className="w-full py-2.5 bg-transparent hover:bg-red-50 text-red-600 rounded-xl transition-colors text-xs font-semibold"
+                  >
+                    Remover Chave Salva
+                  </button>
+                )}
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
