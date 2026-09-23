@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ImageUploader } from './components/ImageUploader';
 import { LoadingSpinner } from './components/LoadingSpinner';
 import { generateTryOnImage } from './services/geminiService';
+import { saveLookToHistory, getLooksFromHistory, deleteLookFromHistory, SavedLook } from './services/historyStorage';
 import { UploadedImage, AppState } from './types';
 
 const App: React.FC = () => {
@@ -19,6 +20,15 @@ const App: React.FC = () => {
   const [tempStoreLogo, setTempStoreLogo] = useState<string | null>(null);
   const [showBrandingModal, setShowBrandingModal] = useState<boolean>(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
+
+  // Histórico de Looks (IndexedDB)
+  const [history, setHistory] = useState<SavedLook[]>([]);
+
+  // Modal WhatsApp
+  const [showWhatsAppModal, setShowWhatsAppModal] = useState<boolean>(false);
+  const [clientPhone, setClientPhone] = useState<string>('');
+  const [whatsappMsg, setWhatsappMsg] = useState<string>('');
+  const [phoneError, setPhoneError] = useState<string | null>(null);
 
   // Estado do Aplicativo de Prova
   const [userPhoto, setUserPhoto] = useState<UploadedImage | null>(null);
@@ -53,7 +63,15 @@ const App: React.FC = () => {
       setStoreLogo(savedStoreLogo);
       setTempStoreLogo(savedStoreLogo);
     }
+
+    // 3. Carrega Histórico do IndexedDB
+    loadHistory();
   }, []);
+
+  const loadHistory = async () => {
+    const saved = await getLooksFromHistory();
+    setHistory(saved);
+  };
 
   // --- Handlers de Chave de API ---
   const handleSaveKey = (e?: React.FormEvent) => {
@@ -143,6 +161,76 @@ const App: React.FC = () => {
     setShowBrandingModal(false);
   };
 
+  // --- Handlers de Histórico ---
+  const handleSelectHistoryLook = (look: SavedLook) => {
+    setResultImage(look.image);
+    setAppState(AppState.SUCCESS);
+  };
+
+  const handleDeleteHistoryLook = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    await deleteLookFromHistory(id);
+    setHistory(prev => prev.filter(item => item.id !== id));
+  };
+
+  // --- Handlers de Envio por WhatsApp ---
+  const handleOpenWhatsAppModal = () => {
+    setWhatsappMsg(`Olá! Aqui está o resultado do seu look no Provador Virtual da ${storeName}! ✨ O que achou?`);
+    setPhoneError(null);
+    setShowWhatsAppModal(true);
+  };
+
+  const handleSendWhatsApp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    let cleaned = clientPhone.replace(/\D/g, '');
+    if (!cleaned || cleaned.length < 8) {
+      setPhoneError('Por favor, informe o DDD e número válido (ex: 11999998888).');
+      return;
+    }
+
+    // Se informou DDD sem código do país (ex: 10 ou 11 dígitos no Brasil), adiciona 55
+    if (cleaned.length === 10 || cleaned.length === 11) {
+      cleaned = '55' + cleaned;
+    }
+
+    // Tenta compartilhamento nativo no celular (com anexo de arquivo)
+    if (resultImage && typeof navigator !== 'undefined' && 'canShare' in navigator) {
+      try {
+        const res = await fetch(resultImage);
+        const blob = await res.blob();
+        const file = new File([blob], `${storeName.toLowerCase().replace(/\s+/g, '-')}-look.png`, { type: 'image/png' });
+
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({
+            title: `Seu Look - ${storeName}`,
+            text: whatsappMsg,
+            files: [file]
+          });
+          setShowWhatsAppModal(false);
+          return;
+        }
+      } catch (err) {
+        console.log('Navegador não suportou share nativo com arquivo, usando link wa.me', err);
+      }
+    }
+
+    // No desktop: baixa a imagem automaticamente para facilitar anexar no WhatsApp Web
+    try {
+      const downloadLink = document.createElement('a');
+      downloadLink.href = resultImage!;
+      downloadLink.download = `${storeName.toLowerCase().replace(/\s+/g, '-')}-look.png`;
+      downloadLink.click();
+    } catch (e) {
+      console.error(e);
+    }
+
+    // Abre o WhatsApp Web / App diretamente na conversa com o número do cliente
+    const encodedText = encodeURIComponent(`${whatsappMsg}\n\n(A imagem do look foi baixada e está pronta para você anexar na conversa!)`);
+    const whatsappUrl = `https://wa.me/${cleaned}?text=${encodedText}`;
+    window.open(whatsappUrl, '_blank');
+    setShowWhatsAppModal(false);
+  };
+
   // --- Geração do Provador Virtual ---
   const handleGenerate = async () => {
     if (!userPhoto || !clothingPhoto) return;
@@ -160,6 +248,17 @@ const App: React.FC = () => {
       const generatedImage = await generateTryOnImage(userPhoto, clothingPhoto, prompt, apiKey);
       setResultImage(generatedImage);
       setAppState(AppState.SUCCESS);
+
+      // Salva no histórico do IndexedDB
+      const newLook: SavedLook = {
+        id: Date.now().toString(),
+        image: generatedImage,
+        date: Date.now(),
+        prompt: prompt || undefined,
+        storeName: storeName
+      };
+      await saveLookToHistory(newLook);
+      setHistory(prev => [newLook, ...prev]);
     } catch (error: any) {
       const msg = error.message || '';
       if (msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('Quota exceeded')) {
@@ -323,7 +422,7 @@ const App: React.FC = () => {
             </div>
 
             {/* Results Column */}
-            <div className="lg:col-span-7">
+            <div className="lg:col-span-7 flex flex-col gap-6">
               <div className="h-full min-h-[500px] bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden flex flex-col relative">
                 <div className="border-b border-slate-100 p-4 bg-slate-50/50 flex justify-between items-center">
                   <h3 className="font-semibold text-slate-800">Resultado do Look</h3>
@@ -332,7 +431,7 @@ const App: React.FC = () => {
                       onClick={handleReset}
                       className="text-sm text-slate-500 hover:text-slate-800 font-medium px-3 py-1 hover:bg-slate-100 rounded-lg transition-colors"
                     >
-                      Começar de novo
+                      Novo Look
                     </button>
                   )}
                 </div>
@@ -385,24 +484,85 @@ const App: React.FC = () => {
                       <img 
                         src={resultImage} 
                         alt="Resultado Provador Virtual" 
-                        className="max-h-[600px] w-auto max-w-full rounded-lg shadow-md object-contain"
+                        className="max-h-[580px] w-auto max-w-full rounded-lg shadow-md object-contain"
                       />
-                      <div className="absolute bottom-6 flex gap-3 opacity-0 group-hover:opacity-100 transition-all transform translate-y-2 group-hover:translate-y-0">
+                      {/* Botões de Ação no Resultado */}
+                      <div className="absolute bottom-5 flex flex-wrap gap-2.5 opacity-90 sm:opacity-0 group-hover:opacity-100 transition-all transform translate-y-1 group-hover:translate-y-0 px-2 justify-center">
+                        {/* Botão Baixar */}
                         <a 
                           href={resultImage} 
                           download={`${storeName.toLowerCase().replace(/\s+/g, '-')}-look.png`}
-                          className="px-6 py-3 bg-white/90 backdrop-blur text-indigo-600 rounded-full font-bold shadow-xl hover:bg-white flex items-center gap-2 border border-indigo-100"
+                          className="px-5 py-2.5 bg-white/95 backdrop-blur text-slate-700 rounded-full font-semibold shadow-lg hover:bg-white hover:text-indigo-600 flex items-center gap-2 border border-slate-200 text-xs sm:text-sm transition-all"
                         >
-                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
                             <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M12 12.75l-3.25-3.25m3.25 3.25 3.25-3.25M12 12.75V3.75" />
                           </svg>
-                          Baixar Resultado
+                          Baixar Look
                         </a>
+
+                        {/* Botão WhatsApp */}
+                        <button 
+                          onClick={handleOpenWhatsAppModal}
+                          className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-full font-semibold shadow-lg shadow-emerald-600/25 flex items-center gap-2 text-xs sm:text-sm transition-all"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                            <path d="M13.601 2.326A7.854 7.854 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.933 7.933 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.898 7.898 0 0 0 13.6 2.326zM7.994 14.521a6.573 6.573 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.557 6.557 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592zm3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.729.729 0 0 0-.529.247c-.182.198-.691.677-.691 1.654 0 .977.71 1.916.81 2.049.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232z"/>
+                          </svg>
+                          Enviar pelo WhatsApp
+                        </button>
                       </div>
                     </div>
                   )}
                 </div>
               </div>
+
+              {/* Galeria de Histórico de Looks (IndexedDB) */}
+              {history.length > 0 && (
+                <div className="bg-white rounded-2xl p-5 shadow-xs border border-slate-100">
+                  <div className="flex items-center justify-between mb-3.5">
+                    <div className="flex items-center gap-2">
+                      <div className="p-1.5 bg-indigo-50 text-indigo-600 rounded-lg">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                        </svg>
+                      </div>
+                      <h4 className="text-sm font-semibold text-slate-800">Histórico de Looks ({history.length})</h4>
+                    </div>
+                    <span className="text-[11px] text-slate-400">Clique para carregar</span>
+                  </div>
+
+                  <div className="flex gap-3 overflow-x-auto pb-2 pt-1 scrollbar-thin">
+                    {history.map((item) => (
+                      <div
+                        key={item.id}
+                        onClick={() => handleSelectHistoryLook(item)}
+                        className={`relative shrink-0 w-22 h-30 rounded-xl overflow-hidden cursor-pointer border-2 transition-all group ${
+                          resultImage === item.image
+                            ? 'border-indigo-600 shadow-md ring-2 ring-indigo-200 scale-102'
+                            : 'border-slate-200 hover:border-indigo-400 hover:shadow-xs'
+                        }`}
+                        title="Clique para visualizar este look"
+                      >
+                        <img src={item.image} alt="Look anterior" className="w-full h-full object-cover" />
+                        <button
+                          onClick={(e) => handleDeleteHistoryLook(e, item.id)}
+                          className="absolute top-1 right-1 bg-red-600/90 hover:bg-red-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-xs"
+                          title="Excluir do histórico"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-3 h-3">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                        <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/70 to-transparent p-1">
+                          <span className="text-[9px] text-white/95 block truncate">
+                            {new Date(item.date).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </main>
@@ -419,6 +579,84 @@ const App: React.FC = () => {
           </p>
         </div>
       </footer>
+
+      {/* Modal: Enviar pelo WhatsApp */}
+      {showWhatsAppModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4">
+          <div className="max-w-md w-full bg-white rounded-3xl p-6 sm:p-8 shadow-2xl relative border border-slate-100">
+            <button 
+              onClick={() => setShowWhatsAppModal(false)}
+              className="absolute top-5 right-5 text-slate-400 hover:text-slate-600 transition-colors p-1"
+              aria-label="Fechar"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            <div className="w-14 h-14 bg-emerald-100 rounded-2xl flex items-center justify-center mx-auto mb-4 text-emerald-600">
+              <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M13.601 2.326A7.854 7.854 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.933 7.933 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.898 7.898 0 0 0 13.6 2.326zM7.994 14.521a6.573 6.573 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.557 6.557 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592zm3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.729.729 0 0 0-.529.247c-.182.198-.691.677-.691 1.654 0 .977.71 1.916.81 2.049.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232z"/>
+              </svg>
+            </div>
+
+            <h2 className="text-xl font-bold text-slate-900 text-center mb-1">
+              Enviar Look por WhatsApp
+            </h2>
+            <p className="text-slate-600 text-xs sm:text-sm text-center mb-6">
+              Envie o resultado do look diretamente para o WhatsApp do seu cliente!
+            </p>
+
+            <form onSubmit={handleSendWhatsApp} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
+                  Número do WhatsApp do Cliente
+                </label>
+                <div className="relative">
+                  <input
+                    type="tel"
+                    value={clientPhone}
+                    onChange={(e) => setClientPhone(e.target.value)}
+                    placeholder="Ex: (11) 99999-8888 ou 11999998888"
+                    className="w-full px-4 py-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all"
+                    autoFocus
+                  />
+                </div>
+                {phoneError && (
+                  <p className="mt-1.5 text-xs text-red-600 font-medium">{phoneError}</p>
+                )}
+                <p className="text-[11px] text-slate-400 mt-1">
+                  💡 Informe DDD + Número (ex: 11999998888). O código do país (55) é adicionado automaticamente.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
+                  Mensagem de Acompanhamento
+                </label>
+                <textarea
+                  rows={3}
+                  value={whatsappMsg}
+                  onChange={(e) => setWhatsappMsg(e.target.value)}
+                  className="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:bg-white transition-all resize-none"
+                />
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition-all shadow-md hover:shadow-emerald-600/25 text-sm flex items-center justify-center gap-2"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                    <path d="M13.601 2.326A7.854 7.854 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.933 7.933 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.898 7.898 0 0 0 13.6 2.326z"/>
+                  </svg>
+                  <span>Abrir WhatsApp e Enviar</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Modal White-Label: Personalizar Marca da Loja */}
       {showBrandingModal && (
