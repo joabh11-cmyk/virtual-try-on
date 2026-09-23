@@ -234,17 +234,18 @@ const App: React.FC = () => {
                 <span className="sm:hidden">Marca</span>
               </button>
 
-              {/* Botão Chave API */}
+              {/* Indicador de Status da Chave de API (Verde se conectada, Vermelho se não) */}
               <button
                 onClick={handleOpenKeyModal}
-                className={`text-xs font-medium px-3 py-1.5 rounded-full transition-all flex items-center gap-1.5 shadow-2xs ${
+                className={`w-8 h-8 rounded-full transition-all flex items-center justify-center shadow-2xs ${
                   apiKey
-                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
-                    : 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100'
+                    ? 'bg-emerald-50 border border-emerald-300 hover:bg-emerald-100 text-emerald-600'
+                    : 'bg-red-50 border border-red-300 hover:bg-red-100 text-red-600'
                 }`}
+                title={apiKey ? 'Chave de API conectada (Clique para alterar)' : 'Chave de API não conectada (Clique para inserir)'}
+                aria-label={apiKey ? 'Chave conectada' : 'Chave não conectada'}
               >
-                <span className={`w-2 h-2 rounded-full ${apiKey ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
-                <span>{apiKey ? 'Chave Conectada' : 'Inserir Chave'}</span>
+                <span className={`w-3 h-3 rounded-full ${apiKey ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'}`} />
               </button>
             </div>
           </div>
