@@ -42,15 +42,15 @@ Clique no botão abaixo para iniciar a importação direta no seu Netlify:
 
 [![Deploy to Netlify](https://www.netlify.com/img/deploy/button.svg)](https://app.netlify.com/start/deploy?repository=https://github.com/joabh11-cmyk/virtual-try-on)
 
-### Opção B — Manualmente pelo Painel do Netlify:
-1. Crie uma conta gratuita em [netlify.com](https://www.netlify.com).
-2. No painel inicial, clique em **"Add new site"** e selecione **"Import an existing project"**.
-3. Escolha **GitHub** e dê permissão para acessar o repositório `virtual-try-on`.
-4. As configurações de Build serão detectadas automaticamente:
+### Opção B — Manualmente pelo Painel do Netlify (Via Fork):
+1. Acesse este repositório no GitHub e clique no botão **"Fork"** (no canto superior direito) para criar uma cópia na sua própria conta.
+2. Acesse sua conta em [netlify.com](https://www.netlify.com).
+3. No painel inicial, clique em **"Import a Git repository"** > **"GitHub"**.
+4. Selecione a sua cópia do repositório `virtual-try-on`.
+5. As configurações de Build serão detectadas automaticamente pelo arquivo `netlify.toml`:
    - **Build command:** `npm run build`
    - **Publish directory:** `dist`
-5. Clique em **"Deploy virtual-try-on"**.
-6. Em menos de 1 minuto, o Netlify gerará uma URL pública (exemplo: `https://seu-projeto.netlify.app`) pronta para você compartilhar ou usar!
+6. Clique em **"Deploy virtual-try-on"** e seu app estará no ar!
 
 ---
 
