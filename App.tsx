@@ -75,10 +75,15 @@ const App: React.FC = () => {
       setResultImage(generatedImage);
       setAppState(AppState.SUCCESS);
     } catch (error: any) {
-      if (error.message === 'AUTH_REQUIRED' || error.message?.includes('API_KEY')) {
+      const msg = error.message || '';
+      if (msg.includes('429') || msg.includes('RESOURCE_EXHAUSTED') || msg.includes('Quota exceeded')) {
+        setErrorMessage(
+          'O modelo de geração de imagem do Gemini (Gemini 3 Pro) exige um projeto com faturamento (Billing) ativado no Google AI Studio. No plano sem cartão cadastrado, o Google define cota zero para geração de imagens. Ative o faturamento no Google AI Studio (novas contas recebem US$ 300 em créditos de teste).'
+        );
+      } else if (error.message === 'AUTH_REQUIRED' || msg.includes('API_KEY')) {
         setErrorMessage('Sua chave de API do Gemini parece ser inválida ou expirou. Por favor, atualize sua chave.');
       } else {
-        setErrorMessage(error.message || 'Algo deu errado. Tente fotos com fundo mais simples.');
+        setErrorMessage(msg || 'Algo deu errado. Tente fotos com fundo mais simples.');
       }
       setAppState(AppState.ERROR);
     }
