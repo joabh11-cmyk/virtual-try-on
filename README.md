@@ -28,7 +28,7 @@ Para usar o aplicativo, você precisa de uma chave de API do Google Gemini. O Go
 1. Acesse o [Google AI Studio](https://aistudio.google.com/app/apikey).
 2. Faça login com sua conta do Google.
 3. Clique no botão azul **"Create API key"** (Criar chave de API).
-4. Selecione ou crie um projeto e copie a chave gerada (ela começa com `AIzaSy...`).
+4. Selecione ou crie um projeto e copie a chave gerada (no novo formato do Google ela começa com `AQ.` ou `AQ.Ab...`, ou no formato antigo `AIzaSy...`).
 5. Cole essa chave diretamente na tela inicial do Virtual Try-On quando solicitado.
 
 ---

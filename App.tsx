@@ -327,7 +327,7 @@ const App: React.FC = () => {
                     type={showPassword ? 'text' : 'password'}
                     value={tempKeyInput}
                     onChange={(e) => setTempKeyInput(e.target.value)}
-                    placeholder="AIzaSy..."
+                    placeholder="Cole sua chave (AQ... ou AIza...)"
                     className="w-full px-4 py-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all pr-10"
                     autoFocus
                   />
