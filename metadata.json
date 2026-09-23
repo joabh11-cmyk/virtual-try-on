@@ -1,0 +1,8 @@
+{
+  "name": "Gemini Virtual Try-On",
+  "description": "A virtual fitting room powered by Gemini 2.5 Flash Image. Upload a photo of yourself and a piece of clothing to see how it looks on you.",
+  "requestFramePermissions": [
+    "camera"
+  ],
+  "majorCapabilities": []
+}
