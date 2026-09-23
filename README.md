@@ -17,7 +17,9 @@ O **Virtual Try-On Pro** é uma aplicação web moderna que permite a qualquer p
 2. Enviar a foto de uma peça de roupa (camiseta, calça, vestido, casaco, etc.).
 3. Gerar instantaneamente uma nova imagem foto-realista da pessoa vestindo aquela roupa, preservando a identidade, postura, sombras e iluminação natural.
 
-Toda a geração acontece de ponta a ponta com privacidade: **as imagens não são armazenadas em servidores** e o visitante utiliza sua própria chave gratuita da API Gemini (salva exclusivamente no próprio navegador).
+🏷️ **Recurso White-Label Incluso:** Você ou seus clientes podem personalizar o **nome da loja** e fazer upload da **sua própria logo**, deixando a ferramenta com a cara da sua marca (com assinatura discreta *by BespokeTech*).
+
+Toda a geração acontece de ponta a ponta com privacidade: **as imagens não são armazenadas em servidores** e o visitante utiliza sua própria chave da API Gemini (salva exclusivamente no próprio navegador).
 
 ---
 

@@ -1,16 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ImageUploader } from './components/ImageUploader';
 import { LoadingSpinner } from './components/LoadingSpinner';
 import { generateTryOnImage } from './services/geminiService';
 import { UploadedImage, AppState } from './types';
 
 const App: React.FC = () => {
+  // Configurações de API
   const [apiKey, setApiKey] = useState<string>('');
   const [tempKeyInput, setTempKeyInput] = useState<string>('');
   const [showKeyModal, setShowKeyModal] = useState<boolean>(false);
   const [showPassword, setShowPassword] = useState<boolean>(false);
   const [keyError, setKeyError] = useState<string | null>(null);
 
+  // Configurações White-Label (Marca da Loja)
+  const [storeName, setStoreName] = useState<string>('Virtual Try-On Pro');
+  const [storeLogo, setStoreLogo] = useState<string | null>(null);
+  const [tempStoreName, setTempStoreName] = useState<string>('Virtual Try-On Pro');
+  const [tempStoreLogo, setTempStoreLogo] = useState<string | null>(null);
+  const [showBrandingModal, setShowBrandingModal] = useState<boolean>(false);
+  const logoInputRef = useRef<HTMLInputElement>(null);
+
+  // Estado do Aplicativo de Prova
   const [userPhoto, setUserPhoto] = useState<UploadedImage | null>(null);
   const [clothingPhoto, setClothingPhoto] = useState<UploadedImage | null>(null);
   const [prompt, setPrompt] = useState<string>('');
@@ -19,7 +29,7 @@ const App: React.FC = () => {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    // Carrega chave salva no LocalStorage ou variável de ambiente (Vite)
+    // 1. Carrega chave da API do LocalStorage ou variável de ambiente
     const savedKey = localStorage.getItem('gemini_api_key');
     const envKey = (typeof process !== 'undefined' && process.env?.API_KEY) ? process.env.API_KEY : '';
 
@@ -30,8 +40,22 @@ const App: React.FC = () => {
       setApiKey(envKey);
       setTempKeyInput(envKey);
     }
+
+    // 2. Carrega personalização White-Label da loja
+    const savedStoreName = localStorage.getItem('vto_store_name');
+    if (savedStoreName) {
+      setStoreName(savedStoreName);
+      setTempStoreName(savedStoreName);
+    }
+
+    const savedStoreLogo = localStorage.getItem('vto_store_logo');
+    if (savedStoreLogo) {
+      setStoreLogo(savedStoreLogo);
+      setTempStoreLogo(savedStoreLogo);
+    }
   }, []);
 
+  // --- Handlers de Chave de API ---
   const handleSaveKey = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const cleanKey = tempKeyInput.trim();
@@ -58,6 +82,68 @@ const App: React.FC = () => {
     setShowKeyModal(true);
   };
 
+  // --- Handlers de White-Label (Personalização de Marca) ---
+  const handleOpenBrandingModal = () => {
+    setTempStoreName(storeName);
+    setTempStoreLogo(storeLogo);
+    setShowBrandingModal(true);
+  };
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 2 * 1024 * 1024) {
+      alert('Por favor, selecione uma imagem de até 2MB.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setTempStoreLogo(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleRemoveTempLogo = () => {
+    setTempStoreLogo(null);
+    if (logoInputRef.current) {
+      logoInputRef.current.value = '';
+    }
+  };
+
+  const handleSaveBranding = (e: React.FormEvent) => {
+    e.preventDefault();
+    const finalName = tempStoreName.trim() || 'Virtual Try-On Pro';
+    setStoreName(finalName);
+    localStorage.setItem('vto_store_name', finalName);
+
+    if (tempStoreLogo) {
+      setStoreLogo(tempStoreLogo);
+      localStorage.setItem('vto_store_logo', tempStoreLogo);
+    } else {
+      setStoreLogo(null);
+      localStorage.removeItem('vto_store_logo');
+    }
+
+    setShowBrandingModal(false);
+  };
+
+  const handleResetBranding = () => {
+    const defaultName = 'Virtual Try-On Pro';
+    setStoreName(defaultName);
+    setStoreLogo(null);
+    setTempStoreName(defaultName);
+    setTempStoreLogo(null);
+    localStorage.removeItem('vto_store_name');
+    localStorage.removeItem('vto_store_logo');
+    if (logoInputRef.current) {
+      logoInputRef.current.value = '';
+    }
+    setShowBrandingModal(false);
+  };
+
+  // --- Geração do Provador Virtual ---
   const handleGenerate = async () => {
     if (!userPhoto || !clothingPhoto) return;
 
@@ -101,199 +187,351 @@ const App: React.FC = () => {
   const isReady = userPhoto && clothingPhoto;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50/50">
-      {/* Header */}
-      <header className="bg-white/80 backdrop-blur-md sticky top-0 z-40 border-b border-slate-200 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="bg-indigo-600 p-2 rounded-lg text-white">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" />
-              </svg>
-            </div>
-            <div>
-              <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-violet-600">
-                Virtual Try-On Pro
-              </h1>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleOpenKeyModal}
-              className={`text-xs font-medium px-3 py-1.5 rounded-full transition-all flex items-center gap-1.5 ${
-                apiKey
-                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
-                  : 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100'
-              }`}
-            >
-              <span className={`w-2 h-2 rounded-full ${apiKey ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
-              {apiKey ? 'Chave Conectada' : 'Inserir Chave Gemini'}
-            </button>
-            <span className="hidden sm:inline-block text-xs font-medium px-2.5 py-1 bg-indigo-100 text-indigo-700 rounded-full">
-              Gemini 3 Pro
-            </span>
-          </div>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
-          
-          {/* Controls Column */}
-          <div className="lg:col-span-5 space-y-8">
-            <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
-              <h2 className="text-lg font-semibold text-slate-900 mb-1">Passo 1: Upload</h2>
-              <p className="text-slate-500 text-sm mb-6">Envie sua foto e a peça de roupa.</p>
-              
-              <div className="space-y-6">
-                <ImageUploader 
-                  id="user-photo" 
-                  label="1. Sua Foto (Corpo Inteiro é melhor)" 
-                  image={userPhoto} 
-                  onImageChange={setUserPhoto} 
-                />
-                
-                <div className="flex items-center justify-center -my-3 z-10 relative">
-                  <div className="bg-slate-100 p-1.5 rounded-full border border-slate-200 text-slate-400">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                    </svg>
-                  </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-indigo-50/50 flex flex-col justify-between">
+      <div>
+        {/* Header White-Label */}
+        <header className="bg-white/80 backdrop-blur-md sticky top-0 z-40 border-b border-slate-200 shadow-xs">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 flex items-center justify-between">
+            {/* Logo e Nome da Loja */}
+            <div className="flex items-center gap-3">
+              {storeLogo ? (
+                <div className="h-11 max-w-[140px] sm:max-w-[180px] flex items-center justify-center overflow-hidden">
+                  <img
+                    src={storeLogo}
+                    alt={storeName}
+                    className="max-h-full max-w-full object-contain"
+                  />
                 </div>
-
-                <ImageUploader 
-                  id="clothing-photo" 
-                  label="2. Foto da Roupa (Fundo limpo)" 
-                  image={clothingPhoto} 
-                  onImageChange={setClothingPhoto} 
-                />
+              ) : (
+                <div className="bg-gradient-to-br from-indigo-600 to-violet-600 p-2.5 rounded-xl text-white shadow-sm">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" />
+                  </svg>
+                </div>
+              )}
+              <div className="flex flex-col">
+                <h1 className="text-lg sm:text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-indigo-950 leading-tight">
+                  {storeName}
+                </h1>
+                <span className="text-[10px] text-slate-400 font-medium tracking-wide">
+                  by <strong className="text-slate-600 font-semibold hover:text-indigo-600 transition-colors">BespokeTech</strong>
+                </span>
               </div>
             </div>
 
-            <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
-              <label htmlFor="prompt" className="block text-sm font-medium text-slate-700 mb-2">
-                Instruções Extras (Opcional)
-              </label>
-              <textarea
-                id="prompt"
-                rows={3}
-                className="w-full rounded-xl border-slate-200 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 resize-none text-sm p-3 border"
-                placeholder="Ex: Deixe a camiseta por dentro da calça, mude o fundo para um escritório..."
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-              />
+            {/* Ações do Topo */}
+            <div className="flex items-center gap-2 sm:gap-3">
+              {/* Botão Personalizar Loja */}
+              <button
+                onClick={handleOpenBrandingModal}
+                className="text-xs font-medium px-3 py-1.5 rounded-full border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all flex items-center gap-1.5 shadow-2xs"
+                title="Personalizar nome e logotipo da sua loja"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-4 h-4 text-indigo-600">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.53 16.122a3 3 0 0 0-5.78 1.128 2.25 2.25 0 0 1-2.4 2.245 4.5 4.5 0 0 0 8.4-2.245c0-.399-.078-.78-.22-1.128Zm0 0a15.998 15.998 0 0 0 3.388-1.62m-5.043-.025a15.994 15.994 0 0 1 1.622-3.39m3.42 3.42a15.995 15.995 0 0 0 4.764-4.648l3.876-5.814a1.151 1.151 0 0 0-1.597-1.597L14.146 6.32a15.996 15.996 0 0 0-4.649 4.763m3.42 3.42a6.776 6.776 0 0 0-3.42-3.42" />
+                </svg>
+                <span className="hidden sm:inline">Personalizar Loja</span>
+                <span className="sm:hidden">Marca</span>
+              </button>
+
+              {/* Botão Chave API */}
+              <button
+                onClick={handleOpenKeyModal}
+                className={`text-xs font-medium px-3 py-1.5 rounded-full transition-all flex items-center gap-1.5 shadow-2xs ${
+                  apiKey
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
+                    : 'bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100'
+                }`}
+              >
+                <span className={`w-2 h-2 rounded-full ${apiKey ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+                <span>{apiKey ? 'Chave Conectada' : 'Inserir Chave'}</span>
+              </button>
+            </div>
+          </div>
+        </header>
+
+        {/* Main Content */}
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 sm:py-12">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12">
+            
+            {/* Controls Column */}
+            <div className="lg:col-span-5 space-y-8">
+              <div className="bg-white rounded-2xl p-6 shadow-xs border border-slate-100">
+                <h2 className="text-lg font-semibold text-slate-900 mb-1">Passo 1: Upload</h2>
+                <p className="text-slate-500 text-sm mb-6">Envie sua foto e a peça de roupa da loja.</p>
+                
+                <div className="space-y-6">
+                  <ImageUploader 
+                    id="user-photo" 
+                    label="1. Sua Foto (Corpo Inteiro é melhor)" 
+                    image={userPhoto} 
+                    onImageChange={setUserPhoto} 
+                  />
+                  
+                  <div className="flex items-center justify-center -my-3 z-10 relative">
+                    <div className="bg-slate-100 p-1.5 rounded-full border border-slate-200 text-slate-400">
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                      </svg>
+                    </div>
+                  </div>
+
+                  <ImageUploader 
+                    id="clothing-photo" 
+                    label="2. Foto da Roupa (Fundo limpo)" 
+                    image={clothingPhoto} 
+                    onImageChange={setClothingPhoto} 
+                  />
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl p-6 shadow-xs border border-slate-100">
+                <label htmlFor="prompt" className="block text-sm font-medium text-slate-700 mb-2">
+                  Instruções Extras (Opcional)
+                </label>
+                <textarea
+                  id="prompt"
+                  rows={3}
+                  className="w-full rounded-xl border-slate-200 shadow-xs focus:border-indigo-500 focus:ring-indigo-500 resize-none text-sm p-3 border"
+                  placeholder="Ex: Deixe a camiseta por dentro da calça, mude o fundo para uma passarela..."
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                />
+              </div>
+
+              <button
+                onClick={handleGenerate}
+                disabled={!isReady || appState === AppState.GENERATING}
+                className={`w-full py-4 px-6 rounded-xl flex items-center justify-center gap-2 text-white font-semibold shadow-lg transition-all transform hover:scale-[1.01] active:scale-[0.99] ${
+                  !isReady || appState === AppState.GENERATING
+                    ? 'bg-slate-300 cursor-not-allowed shadow-none'
+                    : 'bg-gradient-to-r from-indigo-600 to-violet-600 hover:shadow-indigo-500/25'
+                }`}
+              >
+                {appState === AppState.GENERATING ? (
+                  <span>Processando Provador com IA...</span>
+                ) : (
+                  <>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
+                      <path fillRule="evenodd" d="M9.315 2.004a.75.75 0 0 1 .722 0l12 6.666a.75.75 0 0 1 0 1.309l-12 6.667a.75.75 0 0 1-.722 0l-12-6.667a.75.75 0 0 1 0-1.309l12-6.666Zm.82 13.921V9.524l5.166 2.87-5.166 3.53Zm-1.5 0L3.469 12.394l5.166-2.87v6.401Zm1.5-8.23-5.165 2.87-5.166-2.87 5.166-2.87 5.166-2.87Z" clipRule="evenodd" />
+                    </svg>
+                    <span>Experimentar Look Virtual</span>
+                  </>
+                )}
+              </button>
             </div>
 
-            <button
-              onClick={handleGenerate}
-              disabled={!isReady || appState === AppState.GENERATING}
-              className={`w-full py-4 px-6 rounded-xl flex items-center justify-center gap-2 text-white font-semibold shadow-lg transition-all transform hover:scale-[1.02] active:scale-[0.98] ${
-                !isReady || appState === AppState.GENERATING
-                  ? 'bg-slate-300 cursor-not-allowed shadow-none'
-                  : 'bg-gradient-to-r from-indigo-600 to-violet-600 hover:shadow-indigo-500/25'
-              }`}
-            >
-              {appState === AppState.GENERATING ? (
-                <span>Processando Alta Qualidade...</span>
-              ) : (
-                <>
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-5 h-5">
-                    <path fillRule="evenodd" d="M9.315 2.004a.75.75 0 0 1 .722 0l12 6.666a.75.75 0 0 1 0 1.309l-12 6.667a.75.75 0 0 1-.722 0l-12-6.667a.75.75 0 0 1 0-1.309l12-6.666Zm.82 13.921V9.524l5.166 2.87-5.166 3.53Zm-1.5 0L3.469 12.394l5.166-2.87v6.401Zm1.5-8.23-5.165 2.87-5.166-2.87 5.166-2.87 5.166-2.87Z" clipRule="evenodd" />
-                  </svg>
-                  <span>Gerar Provador Virtual</span>
-                </>
-              )}
-            </button>
-          </div>
+            {/* Results Column */}
+            <div className="lg:col-span-7">
+              <div className="h-full min-h-[500px] bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden flex flex-col relative">
+                <div className="border-b border-slate-100 p-4 bg-slate-50/50 flex justify-between items-center">
+                  <h3 className="font-semibold text-slate-800">Resultado do Look</h3>
+                  {appState === AppState.SUCCESS && (
+                    <button 
+                      onClick={handleReset}
+                      className="text-sm text-slate-500 hover:text-slate-800 font-medium px-3 py-1 hover:bg-slate-100 rounded-lg transition-colors"
+                    >
+                      Começar de novo
+                    </button>
+                  )}
+                </div>
+                
+                <div className="flex-1 flex items-center justify-center p-6 bg-slate-50/30">
+                  {appState === AppState.IDLE && (
+                    <div className="text-center max-w-sm mx-auto p-8 rounded-2xl border-2 border-dashed border-slate-200">
+                      <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
+                        </svg>
+                      </div>
+                      <h4 className="text-slate-900 font-medium mb-1">Nenhum resultado ainda</h4>
+                      <p className="text-slate-500 text-sm">Suba a sua foto e a peça de roupa para ver a mágica do provador virtual.</p>
+                    </div>
+                  )}
 
-          {/* Results Column */}
-          <div className="lg:col-span-7">
-            <div className="h-full min-h-[500px] bg-white rounded-2xl shadow-lg border border-slate-200 overflow-hidden flex flex-col relative">
-              <div className="border-b border-slate-100 p-4 bg-slate-50/50 flex justify-between items-center">
-                <h3 className="font-semibold text-slate-800">Resultado</h3>
-                {appState === AppState.SUCCESS && (
-                  <button 
-                    onClick={handleReset}
-                    className="text-sm text-slate-500 hover:text-slate-800 font-medium px-3 py-1 hover:bg-slate-100 rounded-lg transition-colors"
+                  {appState === AppState.GENERATING && (
+                    <LoadingSpinner />
+                  )}
+
+                  {appState === AppState.ERROR && (
+                    <div className="text-center p-8 max-w-md">
+                      <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4 text-red-500">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
+                        </svg>
+                      </div>
+                      <h4 className="text-red-700 font-medium mb-2">Erro na Geração</h4>
+                      <p className="text-red-600/80 text-sm mb-6 leading-relaxed">{errorMessage}</p>
+                      <div className="flex justify-center gap-3">
+                        <button 
+                          onClick={handleOpenKeyModal}
+                          className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors shadow"
+                        >
+                          Verificar Chave
+                        </button>
+                        <button 
+                          onClick={handleGenerate}
+                          className="px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors"
+                        >
+                          Tentar Novamente
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {appState === AppState.SUCCESS && resultImage && (
+                    <div className="relative w-full h-full flex flex-col items-center justify-center group">
+                      <img 
+                        src={resultImage} 
+                        alt="Resultado Provador Virtual" 
+                        className="max-h-[600px] w-auto max-w-full rounded-lg shadow-md object-contain"
+                      />
+                      <div className="absolute bottom-6 flex gap-3 opacity-0 group-hover:opacity-100 transition-all transform translate-y-2 group-hover:translate-y-0">
+                        <a 
+                          href={resultImage} 
+                          download={`${storeName.toLowerCase().replace(/\s+/g, '-')}-look.png`}
+                          className="px-6 py-3 bg-white/90 backdrop-blur text-indigo-600 rounded-full font-bold shadow-xl hover:bg-white flex items-center gap-2 border border-indigo-100"
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M12 12.75l-3.25-3.25m3.25 3.25 3.25-3.25M12 12.75V3.75" />
+                          </svg>
+                          Baixar Resultado
+                        </a>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </main>
+      </div>
+
+      {/* Footer Discreto - By BespokeTech */}
+      <footer className="mt-16 py-6 border-t border-slate-200/80 bg-white/60 backdrop-blur-sm text-center">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-500">
+          <p>© {new Date().getFullYear()} {storeName} • Todos os direitos reservados</p>
+          <p className="flex items-center gap-2 text-slate-400">
+            <span>Tecnologia White-Label de Provador AI</span>
+            <span>•</span>
+            <span className="font-semibold text-slate-600">by BespokeTech</span>
+          </p>
+        </div>
+      </footer>
+
+      {/* Modal White-Label: Personalizar Marca da Loja */}
+      {showBrandingModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4">
+          <div className="max-w-md w-full bg-white rounded-3xl p-6 sm:p-8 shadow-2xl relative border border-slate-100">
+            <button 
+              onClick={() => setShowBrandingModal(false)}
+              className="absolute top-5 right-5 text-slate-400 hover:text-slate-600 transition-colors p-1"
+              aria-label="Fechar"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            <div className="w-14 h-14 bg-indigo-100 rounded-2xl flex items-center justify-center mx-auto mb-4 text-indigo-600">
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-7 h-7">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.53 16.122a3 3 0 0 0-5.78 1.128 2.25 2.25 0 0 1-2.4 2.245 4.5 4.5 0 0 0 8.4-2.245c0-.399-.078-.78-.22-1.128Zm0 0a15.998 15.998 0 0 0 3.388-1.62m-5.043-.025a15.994 15.994 0 0 1 1.622-3.39m3.42 3.42a15.995 15.995 0 0 0 4.764-4.648l3.876-5.814a1.151 1.151 0 0 0-1.597-1.597L14.146 6.32a15.996 15.996 0 0 0-4.649 4.763m3.42 3.42a6.776 6.776 0 0 0-3.42-3.42" />
+              </svg>
+            </div>
+
+            <h2 className="text-xl font-bold text-slate-900 text-center mb-1">
+              Personalizar Marca da Loja
+            </h2>
+            <p className="text-slate-600 text-xs sm:text-sm text-center mb-6">
+              Configure o nome e logotipo da sua loja. O aplicativo fica com a cara da sua marca!
+            </p>
+
+            <form onSubmit={handleSaveBranding} className="space-y-5">
+              {/* Nome da Loja */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
+                  Nome da sua Loja ou Marca
+                </label>
+                <input
+                  type="text"
+                  value={tempStoreName}
+                  onChange={(e) => setTempStoreName(e.target.value)}
+                  placeholder="Ex: Boutique Elegance, Moda VIP..."
+                  className="w-full px-4 py-3 text-sm bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
+                  maxLength={50}
+                />
+              </div>
+
+              {/* Logotipo da Loja */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-2">
+                  Logotipo da Loja (Opcional)
+                </label>
+
+                {tempStoreLogo ? (
+                  <div className="flex items-center gap-4 p-3 bg-slate-50 rounded-xl border border-slate-200">
+                    <div className="w-16 h-12 bg-white rounded-lg border border-slate-200 flex items-center justify-center p-1 overflow-hidden">
+                      <img src={tempStoreLogo} alt="Preview Logo" className="max-h-full max-w-full object-contain" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-xs font-medium text-slate-700">Logo carregado</p>
+                      <button
+                        type="button"
+                        onClick={handleRemoveTempLogo}
+                        className="text-xs text-red-600 hover:text-red-700 font-semibold"
+                      >
+                        Remover logo
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <input
+                      type="file"
+                      ref={logoInputRef}
+                      accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                      onChange={handleLogoUpload}
+                      className="hidden"
+                      id="logo-upload-input"
+                    />
+                    <label
+                      htmlFor="logo-upload-input"
+                      className="w-full py-4 border-2 border-dashed border-slate-300 hover:border-indigo-400 rounded-xl flex flex-col items-center justify-center cursor-pointer bg-slate-50/50 hover:bg-indigo-50/30 transition-all"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-6 h-6 text-slate-400 mb-1">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 16.5V9.75m0 0 3 3m-3-3-3 3M6.75 19.5a4.5 4.5 0 0 1-1.41-8.775 5.25 5.25 0 0 1 10.233-2.33 3 3 0 0 1 3.758 3.848A3.752 3.752 0 0 1 18 19.5H6.75Z" />
+                      </svg>
+                      <span className="text-xs font-medium text-indigo-600">Subir imagem do Logo</span>
+                      <span className="text-[10px] text-slate-400 mt-0.5">PNG, JPG ou SVG (até 2MB)</span>
+                    </label>
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-2 space-y-2">
+                <button
+                  type="submit"
+                  className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl transition-all shadow-md hover:shadow-indigo-500/25 text-sm"
+                >
+                  Salvar Personalização
+                </button>
+
+                {(storeName !== 'Virtual Try-On Pro' || storeLogo) && (
+                  <button
+                    type="button"
+                    onClick={handleResetBranding}
+                    className="w-full py-2 bg-transparent hover:bg-slate-100 text-slate-600 rounded-xl transition-colors text-xs font-semibold"
                   >
-                    Começar de novo
+                    Restaurar Marca Padrão
                   </button>
                 )}
               </div>
-              
-              <div className="flex-1 flex items-center justify-center p-6 bg-slate-50/30">
-                {appState === AppState.IDLE && (
-                  <div className="text-center max-w-sm mx-auto p-8 rounded-2xl border-2 border-dashed border-slate-200">
-                    <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4 text-slate-400">
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
-                      </svg>
-                    </div>
-                    <h4 className="text-slate-900 font-medium mb-1">Nenhum resultado ainda</h4>
-                    <p className="text-slate-500 text-sm">Suba suas fotos e veja a mágica acontecer com IA de última geração.</p>
-                  </div>
-                )}
-
-                {appState === AppState.GENERATING && (
-                  <LoadingSpinner />
-                )}
-
-                {appState === AppState.ERROR && (
-                  <div className="text-center p-8 max-w-md">
-                    <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-4 text-red-500">
-                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
-                      </svg>
-                    </div>
-                    <h4 className="text-red-700 font-medium mb-2">Erro na Geração</h4>
-                    <p className="text-red-600/80 text-sm mb-6">{errorMessage}</p>
-                    <div className="flex justify-center gap-3">
-                      <button 
-                        onClick={handleOpenKeyModal}
-                        className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors shadow"
-                      >
-                        Verificar Chave
-                      </button>
-                      <button 
-                        onClick={handleGenerate}
-                        className="px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition-colors"
-                      >
-                        Tentar Novamente
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {appState === AppState.SUCCESS && resultImage && (
-                  <div className="relative w-full h-full flex flex-col items-center justify-center group">
-                    <img 
-                      src={resultImage} 
-                      alt="Generated Try-On" 
-                      className="max-h-[600px] w-auto max-w-full rounded-lg shadow-md object-contain"
-                    />
-                    <div className="absolute bottom-6 flex gap-3 opacity-0 group-hover:opacity-100 transition-all transform translate-y-2 group-hover:translate-y-0">
-                      <a 
-                        href={resultImage} 
-                        download="meu-look-ai.png"
-                        className="px-6 py-3 bg-white/90 backdrop-blur text-indigo-600 rounded-full font-bold shadow-xl hover:bg-white flex items-center gap-2 border border-indigo-100"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M12 12.75l-3.25-3.25m3.25 3.25 3.25-3.25M12 12.75V3.75" />
-                        </svg>
-                        Baixar Resultado
-                      </a>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
+            </form>
           </div>
         </div>
-      </main>
+      )}
 
-      {/* Modal / Overlay para Configuração de Chave de API */}
+      {/* Modal de Configuração de Chave de API */}
       {(!apiKey || showKeyModal) && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-sm p-4">
           <div className="max-w-md w-full bg-white rounded-3xl p-6 sm:p-8 shadow-2xl relative border border-slate-100">
