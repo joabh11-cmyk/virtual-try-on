@@ -91,9 +91,10 @@ Se você teve qualquer dificuldade para instalar, precisa de ajuda ou quer o apl
 - ✅ **Integração com e-commerce ou catálogo**
 - ✅ **Suporte prioritário e consultoria**
 
-📲 **Fale diretamente comigo para contratar a instalação:**
-- **Instagram:** [@joabh11](https://instagram.com) *(envie um direct com a mensagem: "Quero ajuda com o Virtual Try-On")*
-- **E-mail:** [joabh11@hotmail.com](mailto:joabh11@hotmail.com)
+📲 **Fale diretamente conosco para contratar a instalação:**
+- **Instagram Pessoal:** [@joabhsouzza](https://instagram.com/joabhsouzza) *(envie um direct com a mensagem: "Quero ajuda com o Virtual Try-On")*
+- **Instagram da Empresa:** [@bespoke_tech](https://instagram.com/bespoke_tech) *(siga para novidades, automações e IA)*
+- **E-mail Comercial:** [contato@bespoketech.com.br](mailto:contato@bespoketech.com.br)
 
 ---
 

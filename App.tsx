@@ -312,9 +312,15 @@ const App: React.FC = () => {
                 <h1 className="text-lg sm:text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-slate-900 to-indigo-950 leading-tight">
                   {storeName}
                 </h1>
-                <span className="text-[10px] text-slate-400 font-medium tracking-wide">
+                <a
+                  href="https://instagram.com/bespoke_tech"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[10px] text-slate-400 font-medium tracking-wide hover:text-indigo-600 transition-colors inline-block"
+                  title="Desenvolvido por @bespoke_tech"
+                >
                   by <strong className="text-slate-600 font-semibold hover:text-indigo-600 transition-colors">BespokeTech</strong>
-                </span>
+                </a>
               </div>
             </div>
 
@@ -575,7 +581,15 @@ const App: React.FC = () => {
           <p className="flex items-center gap-2 text-slate-400">
             <span>Tecnologia White-Label de Provador AI</span>
             <span>•</span>
-            <span className="font-semibold text-slate-600">by BespokeTech</span>
+            <a
+              href="https://instagram.com/bespoke_tech"
+              target="_blank"
+              rel="noreferrer"
+              className="font-semibold text-slate-600 hover:text-indigo-600 transition-colors"
+              title="Siga @bespoke_tech no Instagram"
+            >
+              by BespokeTech
+            </a>
           </p>
         </div>
       </footer>
